@@ -18,7 +18,7 @@ pysyscsc = Extension('pysyscsc',
                     extra_compile_args = ['-std=c++11'],
                     include_dirs = [sysc_home+'/include'],
                     libraries = ['systemc'],
-                    library_dirs = [sysc_home+'/lib'],
+                    library_dirs = [sysc_home+'/lib64', sysc_home+'/lib', sysc_home+'/lib-linux64', sysc_home+'/lib-linux'],
                     sources = ['PyScModule.cpp'],
                     depends = ['PyScModule.h'])
 
@@ -35,7 +35,7 @@ setup(name='PySysC',
         'Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)'
     ],
     keywords='SystemC simulation',
-    url='https://git.minres.com/SystemC/PySysC',
+    url='https://github.com/accellera-official/PySysC',
     author='MINRES Technologies GmbH',
     author_email='info@minres.com',
     license='Apache-2.0',
