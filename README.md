@@ -1,6 +1,6 @@
 # PySysC
 
-A Python 3 package to use SystemC from Python
+A Python package to make SystemC usable from Python
 
 ## How to setup the environment
 
