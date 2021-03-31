@@ -96,10 +96,6 @@ class Simulation(object):
                 }
             cpp.sc_core.sc_report_handler.set_verbosity_level(verb_lut[log_level]);
         cpp.sc_core.sc_report_handler.set_actions(cpp.sc_core.SC_ID_MORE_THAN_ONE_SIGNAL_DRIVER_, cpp.sc_core.SC_DO_NOTHING);
-        #try:
-        #    cpp.scc.init_cci("GlobalBroker")
-        #except Exception:
-        #    pass
 
     @staticmethod
     def configure(name="", enable_vcd=False):
