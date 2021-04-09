@@ -138,6 +138,16 @@ def _load_pythonization_lib():
             if os.path.isfile(full_path):
                 cppyy.include(full_path)
             return
+    # could not be found in sintall, maybe development environment
+    pkgDir = os.path.join(os.path.dirname( os.path.realpath(__file__)), '..')
+    for file in os.listdir(pkgDir):
+        if re.match(r'pysyscsc.*\.so', file):
+            cppyy.load_library(os.path.join(pkgDir, file))
+            full_path = os.path.join(pkgDir, 'PyScModule.h')
+            if os.path.isfile(full_path):
+                cppyy.include(full_path)
+            return
+    
 
 
 def add_library(file, lib):

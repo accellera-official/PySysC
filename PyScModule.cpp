@@ -6,7 +6,7 @@
 
 #include "PyScModule.h"
 #define PY_SSIZE_T_CLEAN
-#include <python3.6/Python.h>
+#include <Python.h>
 
 class TPyScriptThreadLocker {
     PyGILState_STATE m_state;
