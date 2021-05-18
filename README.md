@@ -32,7 +32,7 @@ SYSTEMC_HOME=<path to SystemC> python3 -m pip install -e PySysC
 
 ## Running the example
 
-To run the example you need to clone and build the PySysC-SC repo. It contains the the code and libraries being used in the example. This project uses [Conan.io](https://conan.io/) as package manager so it should be installed (see down below).
+To run the example you need to clone and build the PySysC-SC repo. It contains the code and libraries being used in the example. This project uses [Conan.io](https://conan.io/) as package manager so it should be installed (see down below).
 To deactivate conan and use a SystemC installation just comment out the line `setup_conan()` in CMakeLists.txt and set the environment variable SYSTEMC_HOME.
 
 ### Run the router_eample.py
