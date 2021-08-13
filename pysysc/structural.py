@@ -116,7 +116,6 @@ class Module(object):
     '''
     classdocs
     '''
-
     def __init__(self, clazz):
         self.cppclazz=clazz
         self.instance=None
@@ -127,8 +126,11 @@ class Module(object):
             raise AttributeError
         return getattr(self.instance, attr)
     
-    def create(self, name):
-        self.instance = self.cppclazz(cpp.sc_core.sc_module_name(str(name)))
+    def create(self, name, *args):
+        if args:
+            self.instance = self.cppclazz(cpp.sc_core.sc_module_name(str(name)), *args)
+        else:
+            self.instance = self.cppclazz(cpp.sc_core.sc_module_name(str(name)))
         return self
 
 class Connection(object):
@@ -146,6 +148,7 @@ class Connection(object):
     
     def sink(self, module_port):
         self.targets.append(module_port)
+        #TODO: add try block and print types of both ports in case of a missmatch
         self.source.bind(module_port)
         return self
 
@@ -160,8 +163,8 @@ class Signal(Connection):
     '''
 
     _sc_inout_re = re.compile(r'^sc_core::sc_(?:_in)?out<(.*)>$')
-    _sc_port_re = re.compile(r'^sc_core::sc_port<[^<]*<(.*)>>$')
-
+    _sc_in_re = re.compile(r'^sc_core::sc_in<(.*)>$')
+    _sc_port_re = re.compile(r'^sc_core::sc_port<[^<]*<(.*)> ?>$')
 
     def __init__(self, name=None):
         Connection.__init__(self)
@@ -169,25 +172,34 @@ class Signal(Connection):
         self.signal=None
         self.data_type=None
         
+    def create_signal(self, module_port):
+        if self.signal is None:
+            port_class_name = type(module_port).__cpp_name__
+            match = self._sc_inout_re.match(port_class_name)
+            if match:
+                self.data_type = match.group(1)
+            else:
+                match = self._sc_in_re.match(port_class_name)
+                if match:
+                    self.data_type = match.group(1)
+                else:
+                    match = self._sc_port_re.match(port_class_name)
+                    if match:
+                        self.data_type = match.group(1)
+            if self.data_type is None:
+                raise AttributeError
+            py_dt_name = self.data_type.replace("::", ".").replace("<", "[").replace(">", "]")
+            self.signal = eval("cpp.sc_core.sc_signal[cpp.%s](self.name)" % py_dt_name)
+            
     def src(self, module_port):
         self.source=module_port
-        port_class_name=type(module_port).__cpp_name__
-        match = self._sc_inout_re.match(port_class_name)
-        if match:
-            self.data_type=match.group(1)
-        else:
-            match = self._sc_port_re.match(port_class_name)
-            if match:
-                self.data_type=match.group(1)
-        if self.data_type is None:
-            raise AttributeError;
-        py_dt_name=self.data_type.replace("::", ".").replace("<", "[").replace(">", "]")
-        self.signal = eval("cpp.sc_core.sc_signal[cpp.%s](self.name)" % py_dt_name)
+        self.create_signal(module_port)
         module_port.bind(self.signal)
         return self
     
     def sink(self, module_port):
         self.targets.append(module_port)
+        self.create_signal(module_port)
         module_port.bind(self.signal)
         return self
         
@@ -195,3 +207,88 @@ class Signal(Connection):
         self.targets.append(module_port_in)
         self.source.bind(module_port_in)
         return Signal().src(module_port_out)
+
+class SignalVector(Connection):
+    '''
+    classdocs
+    '''
+
+    _sc_inout_re = re.compile(r'^sc_core::sc_vector<sc_core::sc_(?:_in)?out<(.*)> ?>$')
+    _sc_in_re = re.compile(r'^sc_core::sc_vector<sc_core::sc_in<(.*)> ?>$')
+    _sc_port_re = re.compile(r'^sc_core::sc_vector<sc_core::sc_port<[^<]*<(.*)> ?> ?>$')
+
+    def __init__(self, name=None):
+        Connection.__init__(self)
+        self.name=name
+        self.signal=None
+        self.data_type=None
+        
+    def create_signal(self, module_port):
+        if self.signal is None:
+            port_class_name = type(module_port).__cpp_name__
+            match = self._sc_inout_re.match(port_class_name)
+            if match:
+                self.data_type = match.group(1)
+            else:
+                match = self._sc_in_re.match(port_class_name)
+                if match:
+                    self.data_type = match.group(1)
+                else:
+                    match = self._sc_port_re.match(port_class_name)
+                    if match:
+                        self.data_type = match.group(1)
+            if self.data_type is None:
+                raise AttributeError
+            py_dt_name = self.data_type.replace("::", ".").replace("<", "[").replace(">", "]")
+            self.signal = eval("cpp.sc_core.sc_signal[cpp.%s](self.name)" % py_dt_name)
+            
+    def src(self, module_port):
+        self.source=module_port
+        self.create_signal(module_port)
+        module_port.bind(self.signal)
+        return self
+    
+    def sink(self, module_port):
+        self.targets.append(module_port)
+        self.create_signal(module_port)
+        module_port.bind(self.signal)
+        return self
+
+class Clock(Connection):
+    '''
+    classdocs
+    '''
+    _sc_time_re = re.compile(r'^sc_core::sc_in<sc_core::sc_time>')
+
+    def __init__(
+            self, 
+            name=None, 
+            period=1.0, 
+            time_unit='SC_NS', 
+            duty_cycle=0.5, 
+            start_time=0, 
+            posedge_first=True):
+        Connection.__init__(self)
+        self.name=name
+        self.clk_tgl = cpp.sc_core.sc_clock(
+            'sc_clock_'+self.name, 
+            cpp.sc_core.sc_time(period, eval(f"cpp.sc_core.{time_unit}")),
+            duty_cycle, 
+            cpp.sc_core.sc_time(start_time, eval(f"cpp.sc_core.{time_unit}")), 
+            posedge_first)
+        self.clk_time = None
+        
+    def sink(self, module_port):
+        self.targets.append(module_port)
+        port_class_name = type(module_port).__cpp_name__
+        match = self._sc_time_re.match(port_class_name)
+        if match:
+            if self.clk_time is None:
+                self.clk_time = cpp.sc_core.sc_signal[cpp.sc_core.sc_time](self.name)
+                self.clk_time.write(self.clk_tgl.period())
+            module_port.bind(self.clk_time)
+        else:
+            module_port.bind(self.clk_tgl)
+        
+        return self
+
