@@ -149,12 +149,17 @@ def _load_pythonization_lib():
             return
     
 
-
-def add_library(file, lib):
+def add_library(header, lib, project_dir=None):
+    lib_path = lib
+    if(project_dir is not None):
+        for root, dirs, files in os.walk(project_dir):
+            if lib in files:
+                lib_path = os.path.join(root, lib)
+                break
     buf = io.StringIO()
     with redirect_stdout(buf), redirect_stderr(buf):
-        cppyy.load_library(lib)
-        cppyy.include(file)
+        cppyy.load_library(lib_path)
+        cppyy.include(header)
     return buf.getvalue()
     
 def add_include_path(incl):
