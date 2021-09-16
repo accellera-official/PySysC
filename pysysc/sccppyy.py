@@ -150,13 +150,14 @@ def _load_pythonization_lib():
                     return
     # check site packages first to check for venv
     for site_dir in site.getsitepackages():
-        for file in os.listdir(site_dir):
-            if re.match(r'pysyscsc.*\.so', file):
-                cppyy.load_library(os.path.join(site_dir, file))
-                full_path = find_file('PyScModule.h', site.PREFIXES)
-                if full_path and os.path.isfile(full_path):
-                    cppyy.include(full_path)
-                return
+        if os.path.isdir(site_dir):
+            for file in os.listdir(site_dir):
+                if re.match(r'pysyscsc.*\.so', file):
+                    cppyy.load_library(os.path.join(site_dir, file))
+                    full_path = find_file('PyScModule.h', site.PREFIXES)
+                    if full_path and os.path.isfile(full_path):
+                        cppyy.include(full_path)
+                    return
     if site.ENABLE_USER_SITE:
         #check user site packages (re.g. ~/.local)
         for user_site_dir in  site.getusersitepackages():    
