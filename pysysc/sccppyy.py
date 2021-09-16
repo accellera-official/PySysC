@@ -7,6 +7,7 @@
 import json
 import cppyy
 import os.path
+import site
 from pathlib import Path
 from sysconfig import get_paths
 import sys
@@ -41,7 +42,12 @@ class NullLogger(object):
     def write(self, message):
         self.buffer+=message
         
-        
+def find_file(name, paths):
+    for path in paths:
+        for root, dirs, files in os.walk(path):
+            if name in files:
+                return os.path.join(root, name)
+                
 def read_config_from_conan(conanfile, build_type='Release'):
     sys.stdout = NullLogger()
     #read conan configuration
@@ -130,24 +136,47 @@ def _load_systemc_cci():
     return False
 
 def _load_pythonization_lib():
-    info = get_paths()
-    for file in os.listdir(info['platlib']):
-        if re.match(r'pysyscsc.*\.so', file):
-            cppyy.load_library(os.path.join(info['platlib'], file))
-            full_path = os.path.join(info['data'], 'include/site/python%d.%d/PySysC/PyScModule.h' % sys.version_info[:2])
-            if os.path.isfile(full_path):
-                cppyy.include(full_path)
-            return
-    # could not be found in sintall, maybe development environment
+    plat_info = get_paths()
+    # check for standard search path
+    for key in plat_info:
+        plat_dir =plat_info[key]
+        if os.path.isdir(plat_dir):
+            for file in os.listdir(plat_dir):
+                if re.match(r'pysyscsc.*\.so', file):
+                    cppyy.load_library(os.path.join(plat_dir, file))
+                    full_path = os.path.join(plat_dir, '../../../include/site/python%d.%d/PySysC/PyScModule.h' % sys.version_info[:2])
+                    if full_path and os.path.isfile(full_path):
+                        cppyy.include(full_path)
+                    return
+    # check site packages first to check for venv
+    for site_dir in site.getsitepackages():
+        for file in os.listdir(site_dir):
+            if re.match(r'pysyscsc.*\.so', file):
+                cppyy.load_library(os.path.join(site_dir, file))
+                full_path = find_file('PyScModule.h', site.PREFIXES)
+                if full_path and os.path.isfile(full_path):
+                    cppyy.include(full_path)
+                return
+    if site.ENABLE_USER_SITE:
+        #check user site packages (re.g. ~/.local)
+        for user_site_dir in  site.getusersitepackages():    
+            for file in os.listdir(user_site_dir):
+                if re.match(r'pysyscsc.*\.so', file):
+                    cppyy.load_library(os.path.join(user_site_dir, file))
+                    full_path = find_file('PyScModule.h', site.USER_BASE)
+                    if full_path and os.path.isfile(full_path):
+                        cppyy.include(full_path)
+                    return
+    # could not be found in install, maybe development environment
     pkgDir = os.path.join(os.path.dirname( os.path.realpath(__file__)), '..')
-    for file in os.listdir(pkgDir):
-        if re.match(r'pysyscsc.*\.so', file):
-            cppyy.load_library(os.path.join(pkgDir, file))
-            full_path = os.path.join(pkgDir, 'PyScModule.h')
-            if os.path.isfile(full_path):
-                cppyy.include(full_path)
-            return
-    
+    if os.path.isdir(pkgDir):
+        for file in os.listdir(pkgDir):
+            if re.match(r'pysyscsc.*\.so', file):
+                cppyy.load_library(os.path.join(pkgDir, file))
+                full_path = os.path.join(pkgDir, 'PyScModule.h')
+                if full_path and os.path.isfile(full_path):
+                    cppyy.include(full_path)
+                return    
 
 def add_library(header, lib, project_dir=None):
     lib_path = lib
