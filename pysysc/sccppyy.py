@@ -70,6 +70,14 @@ def read_config_from_conan(build_dir, build_type='Release'):
     for l in data['libdirs']:
         if os.path.exists(l+'/'+'libsystemc.so'):
             cppyy.load_library(l+'/'+'libsystemc.so')
+    for b in data['builddirs']:
+        if '/systemc/' in b:
+            os.environ['SYSTEMC_HOME'] =b
+        elif '/systemc-cci/' in b:
+            os.environ['CCI_HOME'] = b
+        elif '/systemc-scv/' in b:
+            os.environ['SCV_HOME'] = b
+
     msg = sys.stdout.buffer
     sys.stdout=sys.stdout.terminal
     return msg
@@ -128,30 +136,30 @@ def _load_systemc_cci():
             return True
     return False
 
-def _load_pythonization_lib():
+def _load_pythonization_lib(debug = False):
     plat_info = get_paths()
     # check for standard search path
     for key in plat_info:
         plat_dir =plat_info[key]
         if os.path.isdir(plat_dir):
-            logging.debug("Checking for pythonization lib in platform dir %s"%plat_dir)
+            if debug: logging.debug("Checking for pythonization lib in platform dir %s"%plat_dir)
             for file in os.listdir(plat_dir):
                 if re.match(r'pysyscsc.*\.so', file):
                     cppyy.load_library(os.path.join(plat_dir, file))
                     full_path = os.path.join(plat_dir, '../../../include/site/python%d.%d/PySysC/PyScModule.h' % sys.version_info[:2])
-                    logging.debug('found %s, looking for %s'%(file, full_path))
+                    if debug: logging.debug('found %s, looking for %s'%(file, full_path))
                     if full_path and os.path.isfile(full_path):
                         cppyy.include(full_path)
                     return
     # check site packages first to check for venv
     for site_dir in site.getsitepackages():
         if os.path.isdir(site_dir):
-            logging.debug("Checking for pythonization lib in site package dir %s"%site_dir)
+            if debug: logging.debug("Checking for pythonization lib in site package dir %s"%site_dir)
             for file in os.listdir(site_dir):
                 if re.match(r'pysyscsc.*\.so', file):
                     cppyy.load_library(os.path.join(site_dir, file))
                     full_path = find_file('PyScModule.h', site.PREFIXES)
-                    logging.debug('found %s, looking at %s for %s'%(file, site.PREFIXES, full_path))
+                    if debug: logging.debug('found %s, looking at %s for %s'%(file, site.PREFIXES, full_path))
                     if full_path and os.path.isfile(full_path):
                         cppyy.include(full_path)
                     return
@@ -159,20 +167,20 @@ def _load_pythonization_lib():
         #check user site packages (re.g. ~/.local)
         user_site_dir = site.getusersitepackages()
         if os.path.isdir(user_site_dir):
-            logging.debug("Checking for pythonization lib in user site dir %s"%user_site_dir)
+            if debug: logging.debug("Checking for pythonization lib in user site dir %s"%user_site_dir)
             for file in os.listdir(user_site_dir):
                 if re.match(r'pysyscsc.*\.so', file):
                     cppyy.load_library(os.path.join(user_site_dir, file))
                     user_base = site.USER_BASE
                     full_path = user_base + '/include/python%d.%d/PySysC/PyScModule.h' % sys.version_info[:2]
-                    logging.debug('found %s, looking at %s for %s'%(file, user_base, full_path))
+                    if debug: logging.debug('found %s, looking at %s for %s'%(file, user_base, full_path))
                     if os.path.isfile(full_path):
                         cppyy.include(full_path)
                     return
     # could not be found in install, maybe development environment
     pkgDir = os.path.join(os.path.dirname( os.path.realpath(__file__)), '..')
     if os.path.isdir(pkgDir):
-        logging.debug("Checking for pythonization lib in source dir %s"%pkgDir)
+        if debug: logging.debug("Checking for pythonization lib in source dir %s"%pkgDir)
         for file in os.listdir(pkgDir):
             if re.match(r'pysyscsc.*\.so', file):
                 cppyy.load_library(os.path.join(pkgDir, file))
@@ -180,6 +188,7 @@ def _load_pythonization_lib():
                 if full_path and os.path.isfile(full_path):
                     cppyy.include(full_path)
                 return    
+    sys.exit("No Pythonization found")
 
 def add_library(header, lib, project_dir=None):
     lib_path = lib
