@@ -13,6 +13,7 @@ from sysconfig import get_paths
 import sys
 import re
 import tempfile
+import logging
 from contextlib import (redirect_stdout, redirect_stderr)
 import io
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -133,20 +134,24 @@ def _load_pythonization_lib():
     for key in plat_info:
         plat_dir =plat_info[key]
         if os.path.isdir(plat_dir):
+            logging.debug("Checking for pythonization lib in platform dir %s"%plat_dir)
             for file in os.listdir(plat_dir):
                 if re.match(r'pysyscsc.*\.so', file):
                     cppyy.load_library(os.path.join(plat_dir, file))
                     full_path = os.path.join(plat_dir, '../../../include/site/python%d.%d/PySysC/PyScModule.h' % sys.version_info[:2])
+                    logging.debug('found %s, looking for %s'%(file, full_path))
                     if full_path and os.path.isfile(full_path):
                         cppyy.include(full_path)
                     return
     # check site packages first to check for venv
     for site_dir in site.getsitepackages():
         if os.path.isdir(site_dir):
+            logging.debug("Checking for pythonization lib in site package dir %s"%site_dir)
             for file in os.listdir(site_dir):
                 if re.match(r'pysyscsc.*\.so', file):
                     cppyy.load_library(os.path.join(site_dir, file))
                     full_path = find_file('PyScModule.h', site.PREFIXES)
+                    logging.debug('found %s, looking at %s for %s'%(file, site.PREFIXES, full_path))
                     if full_path and os.path.isfile(full_path):
                         cppyy.include(full_path)
                     return
@@ -154,19 +159,20 @@ def _load_pythonization_lib():
         #check user site packages (re.g. ~/.local)
         user_site_dir = site.getusersitepackages()
         if os.path.isdir(user_site_dir):
-            print("searching in %s"%user_site_dir)
+            logging.debug("Checking for pythonization lib in user site dir %s"%user_site_dir)
             for file in os.listdir(user_site_dir):
                 if re.match(r'pysyscsc.*\.so', file):
                     cppyy.load_library(os.path.join(user_site_dir, file))
                     user_base = site.USER_BASE
                     full_path = user_base + '/include/python%d.%d/PySysC/PyScModule.h' % sys.version_info[:2]
-                    print('found %s, looking at %s for %s'%(file, user_base, full_path))
+                    logging.debug('found %s, looking at %s for %s'%(file, user_base, full_path))
                     if os.path.isfile(full_path):
                         cppyy.include(full_path)
                     return
     # could not be found in install, maybe development environment
     pkgDir = os.path.join(os.path.dirname( os.path.realpath(__file__)), '..')
     if os.path.isdir(pkgDir):
+        logging.debug("Checking for pythonization lib in source dir %s"%pkgDir)
         for file in os.listdir(pkgDir):
             if re.match(r'pysyscsc.*\.so', file):
                 cppyy.load_library(os.path.join(pkgDir, file))
