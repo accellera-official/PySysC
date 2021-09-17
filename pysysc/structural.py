@@ -8,7 +8,6 @@ from cppyy import gbl as cpp
 from builtins import getattr
 import re
 from enum import Enum
-import logging
 
 class Mode(Enum):
     SIM = 1
@@ -71,43 +70,6 @@ class Simulation(object):
         if not cpp.sc_core.sc_end_of_simulation_invoked():
             cpp.sc_core.sc_stop()
         
-    @staticmethod
-    def setup(log_level = logging.WARNING):
-        try:
-            if log_level >= logging.FATAL:
-                cpp.scc.init_logging(cpp.logging.FATAL, False)
-            elif log_level >= logging.ERROR:
-                cpp.scc.init_logging(cpp.logging.ERROR, False)
-            elif log_level >= logging.WARNING:
-                cpp.scc.init_logging(cpp.logging.WARNING, False)
-            elif log_level >= logging.INFO:
-                cpp.scc.init_logging(cpp.logging.INFO, False)
-            elif log_level >= logging.DEBUG:
-                cpp.scc.init_logging(cpp.logging.DEBUG, False)
-            else:
-                cpp.scc.init_logging(cpp.logging.TRACE, False)
-        except Exception: # fall back: use basic SystemC logging setup
-            verb_lut={
-                logging.FATAL:100, #SC_LOW
-                logging.ERROR: 200, #SC_MEDIUM
-                logging.WARNING: 300, #SC_HIGH
-                logging.INFO: 400, #SC_FULL
-                logging.DEBUG: 500 #SC_DEBUG
-                }
-            cpp.sc_core.sc_report_handler.set_verbosity_level(verb_lut[log_level]);
-        cpp.sc_core.sc_report_handler.set_actions(cpp.sc_core.SC_ID_MORE_THAN_ONE_SIGNAL_DRIVER_, cpp.sc_core.SC_DO_NOTHING);
-
-    @staticmethod
-    def configure(name="", enable_vcd=False):
-        if len(name) and os.path.isfile(name):
-            Simulation.cfg = cpp.scc.configurer(cpp.std.string(name));
-            if enable_vcd:
-                trace_name = os.path.basename(name)
-                Simulation.trace = cpp.scc.configurable_tracer(trace_name, 1, True, True)
-                Simulation.trace.add_control()        
-        else:
-            if enable_vcd:
-                Simulation.trace = cpp.scc.tracer('vcd_trace', 1, True)
             
     def __init__(self):
         pass
