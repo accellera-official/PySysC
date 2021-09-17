@@ -4,19 +4,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-import json
 import cppyy
 import os.path
 import site
-from pathlib import Path
 from sysconfig import get_paths
 import sys
 import re
-import tempfile
 import logging
 from contextlib import (redirect_stdout, redirect_stderr)
 import io
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 lang_symbols = {
     3: '199711L',
@@ -31,17 +27,6 @@ includeDirs = set()
 
 interactive = False
 
-class NullLogger(object):
-    def __init__(self):
-        self.terminal = sys.stdout
-        self.buffer=""
-
-    def __getattr__(self, attr):
-        return getattr(self.terminal, attr)
-        
-    def write(self, message):
-        self.buffer+=message
-        
 def find_file(name, paths):
     for path in paths:
         for root, dirs, files in os.walk(path):
@@ -49,21 +34,18 @@ def find_file(name, paths):
                 return os.path.join(root, name)
                 
 def read_config_from_conan(build_dir, build_type='Release'):
-    sys.stdout = NullLogger()
-    #data = toml.load(os.path.join(build_dir, 'conanbuildinfo.txt'))
     data={}
     with io.open(os.path.join(build_dir, 'conanbuildinfo.txt'), encoding='utf-8') as conan_file:
         sl = conan_file.readlines()
         key=''
-        for i, item in enumerate(sl):
-            str = item.rstrip()
-            match = re.search(r'\[(\S+)\]', str)
+        for item in sl:
+            stripped_item = item.rstrip()
+            match = re.search(r'\[(\S+)\]', stripped_item)
             if match:
                 key=match.group(1)
                 data[key]=[]
-            elif len(str):
-                data[key].append(str)
-                
+            elif len(stripped_item):
+                data[key].append(stripped_item)
     # set include pathes and load libraries
     for p in data['includedirs']:
         add_sys_include_path(p)
@@ -77,10 +59,6 @@ def read_config_from_conan(build_dir, build_type='Release'):
             os.environ['CCI_HOME'] = b
         elif '/systemc-scv/' in b:
             os.environ['SCV_HOME'] = b
-
-    msg = sys.stdout.buffer
-    sys.stdout=sys.stdout.terminal
-    return msg
 
 systemc_loaded=False
 cci_loaded=False
@@ -226,7 +204,7 @@ def _pythonizor(clazz, name):
     elif len(name) > 10 and name[:9] == 'sc_export<':
         clazz.__repr__ = lambda self: repr(self.name())
 
-# install the pythonizor as a callback on namespace 'Math' (default is the global namespace)
+# install the pythonizor as a callback on namespace 'sc_core' (default is the global namespace)
 cppyy.py.add_pythonization(_pythonizor, 'sc_core')
     
 # reflection methods
