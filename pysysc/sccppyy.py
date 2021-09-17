@@ -13,7 +13,6 @@ from sysconfig import get_paths
 import sys
 import re
 import tempfile
-import conans.client.conan_api as conan
 from contextlib import (redirect_stdout, redirect_stderr)
 import io
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -48,35 +47,28 @@ def find_file(name, paths):
             if name in files:
                 return os.path.join(root, name)
                 
-def read_config_from_conan(conanfile, build_type='Release'):
+def read_config_from_conan(build_dir, build_type='Release'):
     sys.stdout = NullLogger()
-    #read conan configuration
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        conan_api, client_cache, user_io = conan.Conan.factory() 
-        install_info = conan_api.install(path=conanfile, 
-                                         generators=['json'],
-                                         settings=[f'build_type={build_type}', f'compiler.cppstd={lang_level}'],
-                                         install_folder=tmpdirname)
-    
-        for e in install_info['installed']:
-            name = e['recipe']['name']
-            for p in e['packages']:
-                if name == 'systemc' and p['cpp_info']['rootpath']:
-                    os.environ['SYSTEMC_HOME']=p['cpp_info']['rootpath']
-                elif name == 'systemc-cci' and p['cpp_info']['rootpath']:
-                    os.environ['CCI_HOME']=p['cpp_info']['rootpath']
-                elif name == 'systemc-scv' and p['cpp_info']['rootpath']:
-                    os.environ['SCV_HOME']=p['cpp_info']['rootpath']
-        with open(os.path.join(tmpdirname, "conanbuildinfo.json")) as f:
-            data=json.load(f)   
+    #data = toml.load(os.path.join(build_dir, 'conanbuildinfo.txt'))
+    data={}
+    with io.open(os.path.join(build_dir, 'conanbuildinfo.txt'), encoding='utf-8') as conan_file:
+        sl = conan_file.readlines()
+        key=''
+        for i, item in enumerate(sl):
+            str = item.rstrip()
+            match = re.search(r'\[(\S+)\]', str)
+            if match:
+                key=match.group(1)
+                data[key]=[]
+            elif len(str):
+                data[key].append(str)
+                
     # set include pathes and load libraries
-    for d in data['dependencies']:
-        for p in d['include_paths']:
-            add_sys_include_path(p)
-        if d['name'] == 'systemc':
-            for l in d['lib_paths']:
-                if os.path.exists(l+'/'+'libsystemc.so'):
-                    cppyy.load_library(l+'/'+'libsystemc.so')
+    for p in data['includedirs']:
+        add_sys_include_path(p)
+    for l in data['libdirs']:
+        if os.path.exists(l+'/'+'libsystemc.so'):
+            cppyy.load_library(l+'/'+'libsystemc.so')
     msg = sys.stdout.buffer
     sys.stdout=sys.stdout.terminal
     return msg
