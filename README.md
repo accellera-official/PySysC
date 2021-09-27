@@ -27,7 +27,7 @@ STDCXX=11 python3 -m pip install cppyy
 # clone of PySysC
 git clone https://git.minres.com/SystemC/PySysC.git
 # install PySysC, for development PySysC use 'python3 -m pip install -e`
-SYSTEMC_HOME=<path to SystemC> python3 -m pip install -e PySysC
+SYSTEMC_HOME=<path to SystemC> python3 -m pip install PySysC
 ```
 
 ## Running the example
@@ -54,7 +54,7 @@ python3 router_eample.py
 
 ### Installing conan separately
 
-conan.io will be installed as part of the PySysC module. To install it seperatly and build the example project without
+To install conan being used during cmake and build the example project without
 PySysC you need to execute the following steps:
 
 ```

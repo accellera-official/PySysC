@@ -4,15 +4,13 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-import json
 import cppyy
 import os.path
-from pathlib import Path
+import site
 from sysconfig import get_paths
 import sys
 import re
-import tempfile
-import conans.client.conan_api as conan
+import logging
 from contextlib import (redirect_stdout, redirect_stderr)
 import io
 
@@ -29,52 +27,38 @@ includeDirs = set()
 
 interactive = False
 
-class NullLogger(object):
-    def __init__(self):
-        self.terminal = sys.stdout
-        self.buffer=""
-
-    def __getattr__(self, attr):
-        return getattr(self.terminal, attr)
-        
-    def write(self, message):
-        self.buffer+=message
-        
-        
-def read_config_from_conan(conanfile, build_type='Release'):
-    global lang_level
-    sys.stdout = NullLogger()
-    #read conan configuration
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        conan_api, client_cache, user_io = conan.Conan.factory() 
-        install_info = conan_api.install(path=conanfile, 
-                                         generators=['json'],
-                                         settings=['build_type=%s'%build_type],
-                                         install_folder=tmpdirname)
-    
-        for e in install_info['installed']:
-            name = e['recipe']['name']
-            for p in e['packages']:
-                if name == 'SystemC' and p['cpp_info']['rootpath']:
-                    os.environ['SYSTEMC_HOME']=p['cpp_info']['rootpath']
-                elif name == 'SystemC-CCI' and p['cpp_info']['rootpath']:
-                    os.environ['CCI_HOME']=p['cpp_info']['rootpath']
-                elif name == 'SystemCVerification' and p['cpp_info']['rootpath']:
-                    os.environ['SCV_HOME']=p['cpp_info']['rootpath']
-        with open(os.path.join(tmpdirname, "conanbuildinfo.json")) as f:
-            data=json.load(f)   
+def find_file(name, paths):
+    for path in paths:
+        for root, dirs, files in os.walk(path):
+            if name in files:
+                return os.path.join(root, name)
+                
+def read_config_from_conan(build_dir, build_type='Release'):
+    data={}
+    with io.open(os.path.join(build_dir, 'conanbuildinfo.txt'), encoding='utf-8') as conan_file:
+        sl = conan_file.readlines()
+        key=''
+        for item in sl:
+            stripped_item = item.rstrip()
+            match = re.search(r'\[(\S+)\]', stripped_item)
+            if match:
+                key=match.group(1)
+                data[key]=[]
+            elif len(stripped_item):
+                data[key].append(stripped_item)
     # set include pathes and load libraries
-    for d in data['dependencies']:
-        for p in d['include_paths']:
-            add_sys_include_path(p)
-        if d['name'] == 'SystemC':
-            for l in d['lib_paths']:
-                if os.path.exists(l+'/'+'libsystemc.so'):
-                    cppyy.load_library(l+'/'+'libsystemc.so')
-    lang_level = int(data['options']['SystemC']['stdcxx'])
-    msg = sys.stdout.buffer
-    sys.stdout=sys.stdout.terminal
-    return msg
+    for p in data['includedirs']:
+        add_sys_include_path(p)
+    for l in data['libdirs']:
+        if os.path.exists(l+'/'+'libsystemc.so'):
+            cppyy.load_library(l+'/'+'libsystemc.so')
+    for b in data['builddirs']:
+        if '/systemc/' in b:
+            os.environ['SYSTEMC_HOME'] =b
+        elif '/systemc-cci/' in b:
+            os.environ['CCI_HOME'] = b
+        elif '/systemc-scv/' in b:
+            os.environ['SCV_HOME'] = b
 
 systemc_loaded=False
 cci_loaded=False
@@ -130,32 +114,71 @@ def _load_systemc_cci():
             return True
     return False
 
-def _load_pythonization_lib():
-    info = get_paths()
-    for file in os.listdir(info['platlib']):
-        if re.match(r'pysyscsc.*\.so', file):
-            cppyy.load_library(os.path.join(info['platlib'], file))
-            full_path = os.path.join(info['data'], 'include/site/python%d.%d/PySysC/PyScModule.h' % sys.version_info[:2])
-            if os.path.isfile(full_path):
-                cppyy.include(full_path)
-            return
-    # could not be found in sintall, maybe development environment
+def _load_pythonization_lib(debug = False):
+    plat_info = get_paths()
+    # check for standard search path
+    for key in plat_info:
+        plat_dir =plat_info[key]
+        if os.path.isdir(plat_dir):
+            if debug: logging.debug("Checking for pythonization lib in platform dir %s"%plat_dir)
+            for file in os.listdir(plat_dir):
+                if re.match(r'pysyscsc.*\.so', file):
+                    cppyy.load_library(os.path.join(plat_dir, file))
+                    full_path = os.path.join(plat_dir, '../../../include/site/python%d.%d/PySysC/PyScModule.h' % sys.version_info[:2])
+                    if debug: logging.debug('found %s, looking for %s'%(file, full_path))
+                    if full_path and os.path.isfile(full_path):
+                        cppyy.include(full_path)
+                    return
+    # check site packages first to check for venv
+    for site_dir in site.getsitepackages():
+        if os.path.isdir(site_dir):
+            if debug: logging.debug("Checking for pythonization lib in site package dir %s"%site_dir)
+            for file in os.listdir(site_dir):
+                if re.match(r'pysyscsc.*\.so', file):
+                    cppyy.load_library(os.path.join(site_dir, file))
+                    full_path = find_file('PyScModule.h', site.PREFIXES)
+                    if debug: logging.debug('found %s, looking at %s for %s'%(file, site.PREFIXES, full_path))
+                    if full_path and os.path.isfile(full_path):
+                        cppyy.include(full_path)
+                    return
+    if site.ENABLE_USER_SITE:
+        #check user site packages (re.g. ~/.local)
+        user_site_dir = site.getusersitepackages()
+        if os.path.isdir(user_site_dir):
+            if debug: logging.debug("Checking for pythonization lib in user site dir %s"%user_site_dir)
+            for file in os.listdir(user_site_dir):
+                if re.match(r'pysyscsc.*\.so', file):
+                    cppyy.load_library(os.path.join(user_site_dir, file))
+                    user_base = site.USER_BASE
+                    full_path = user_base + '/include/python%d.%d/PySysC/PyScModule.h' % sys.version_info[:2]
+                    if debug: logging.debug('found %s, looking at %s for %s'%(file, user_base, full_path))
+                    if os.path.isfile(full_path):
+                        cppyy.include(full_path)
+                    return
+    # could not be found in install, maybe development environment
     pkgDir = os.path.join(os.path.dirname( os.path.realpath(__file__)), '..')
-    for file in os.listdir(pkgDir):
-        if re.match(r'pysyscsc.*\.so', file):
-            cppyy.load_library(os.path.join(pkgDir, file))
-            full_path = os.path.join(pkgDir, 'PyScModule.h')
-            if os.path.isfile(full_path):
-                cppyy.include(full_path)
-            return
-    
+    if os.path.isdir(pkgDir):
+        if debug: logging.debug("Checking for pythonization lib in source dir %s"%pkgDir)
+        for file in os.listdir(pkgDir):
+            if re.match(r'pysyscsc.*\.so', file):
+                cppyy.load_library(os.path.join(pkgDir, file))
+                full_path = os.path.join(pkgDir, 'PyScModule.h')
+                if full_path and os.path.isfile(full_path):
+                    cppyy.include(full_path)
+                return    
+    sys.exit("No Pythonization found")
 
-
-def add_library(file, lib):
+def add_library(header, lib, project_dir=None):
+    lib_path = lib
+    if(project_dir is not None):
+        for root, dirs, files in os.walk(project_dir):
+            if lib in files:
+                lib_path = os.path.join(root, lib)
+                break
     buf = io.StringIO()
     with redirect_stdout(buf), redirect_stderr(buf):
-        cppyy.load_library(lib)
-        cppyy.include(file)
+        cppyy.load_library(lib_path)
+        cppyy.include(header)
     return buf.getvalue()
     
 def add_include_path(incl):
@@ -181,7 +204,7 @@ def _pythonizor(clazz, name):
     elif len(name) > 10 and name[:9] == 'sc_export<':
         clazz.__repr__ = lambda self: repr(self.name())
 
-# install the pythonizor as a callback on namespace 'Math' (default is the global namespace)
+# install the pythonizor as a callback on namespace 'sc_core' (default is the global namespace)
 cppyy.py.add_pythonization(_pythonizor, 'sc_core')
     
 # reflection methods
