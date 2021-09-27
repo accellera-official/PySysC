@@ -31,7 +31,7 @@ pysyscsc = Extension('pysyscsc',
 
 
 setup(name='PySysC',
-    version='0.1',
+    version='0.2',
     description='Python SystemC binding',
     long_description=readme(),
     ext_modules = [pysyscsc],
