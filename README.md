@@ -1,6 +1,6 @@
 # PySysC
 
-A Python package to make SystemC usable from Python
+A Python package to make SystemC usable from Python. It supports composition of a SystemC/TLM model as well as running the simulation. As of version 0.2 it also allows to run Python functions as part of an SC_THREAD.
 
 ## How to setup the environment
 
@@ -69,3 +69,4 @@ conan remote add minres https://api.bintray.com/conan/minres/conan-repo
 ## TODO
 
 * pythonize `sc_module` with iteration protocol (`__next__` and `StopIteration`  exception)
+* add support for SC_METHOD
