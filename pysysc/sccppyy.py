@@ -66,6 +66,7 @@ cci_loaded=False
 def load_systemc():
     if 'SYSTEMC_HOME' in os.environ:
         add_sys_include_path(os.path.join(os.environ['SYSTEMC_HOME'], 'include'))
+        systemc_loaded = False
         for l in ['lib', 'lib64', 'lib-linux', 'lib-linux64']:
             for f in ['libsystemc.so']:
                 full_file=os.path.join(os.environ['SYSTEMC_HOME'], l, f)
@@ -103,15 +104,16 @@ def _load_systemc_scv():
 def _load_systemc_cci():
     for home_dir in ['CCI_HOME', 'SYSTEMC_HOME']:
         if home_dir in os.environ:
-            add_sys_include_path(os.path.join(os.environ[home_dir], 'include'))
-            for l in ['lib', 'lib64', 'lib-linux', 'lib-linux64']:
-                for f in ['libcciapi.so']:
-                    full_file = os.path.join(os.environ[home_dir], l, f)
-                    if os.path.isfile(full_file):
-                        cppyy.load_library(full_file)
-            cppyy.include("cci_configuration")
-            cci_loaded=True
-            return True
+            if os.path.exists(os.path.join(os.environ[home_dir], 'include', 'cci_configuration')):
+                add_sys_include_path(os.path.join(os.environ[home_dir], 'include'))
+                for l in ['lib', 'lib64', 'lib-linux', 'lib-linux64']:
+                    for f in ['libcciapi.so']:
+                        full_file = os.path.join(os.environ[home_dir], l, f)
+                        if os.path.isfile(full_file):
+                            cppyy.load_library(full_file)
+                cppyy.include("cci_configuration")
+                cci_loaded=True
+                return True
     return False
 
 def _load_pythonization_lib(debug = False):
