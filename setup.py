@@ -17,12 +17,16 @@ def readme():
         return f.read()
 
 sysc_home = os.environ['SYSTEMC_HOME']
+if os.environ.get('STDCXX') is not None:
+    sysc_cxxstd = os.environ['STDCXX']
+else:
+    sysc_cxxstd = '11'
 sysc_lib_dir = os.path.dirname(find('libsystemc.so', sysc_home))
 
 pysyscsc = Extension('pysyscsc',
                     define_macros = [('MAJOR_VERSION', '1'), ('MINOR_VERSION', '0')],
                     include_dirs = [sysc_home+'/include'],
-                    extra_compile_args = ['-std=c++11'],
+                    extra_compile_args = ['-std=c++%s'%sysc_cxxstd],
                     extra_link_args = ['-Wl,-rpath,%s'%sysc_lib_dir],
                     libraries = ['systemc'],
                     library_dirs = [sysc_lib_dir],

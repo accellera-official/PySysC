@@ -19,8 +19,6 @@ lang_symbols = {
     11:'201103L',
     14:'201402L',
     17:'201703L'}
-lang_level=11
-
 sysIncludeDirs = set()
 
 includeDirs = set()
@@ -63,7 +61,7 @@ def read_config_from_conan(build_dir, build_type='Release'):
 systemc_loaded=False
 cci_loaded=False
 
-def load_systemc():
+def load_systemc(cxxstd=11):
     if 'SYSTEMC_HOME' in os.environ:
         add_sys_include_path(os.path.join(os.environ['SYSTEMC_HOME'], 'include'))
         systemc_loaded = False
@@ -77,7 +75,7 @@ def load_systemc():
 #include "systemc"
 #include "tlm"
 namespace sc_core { extern void pln(); }
-                                """ % lang_symbols[lang_level])
+                                """ % lang_symbols[cxxstd])
                     systemc_loaded=True
                     _load_systemc_cci()
                     break

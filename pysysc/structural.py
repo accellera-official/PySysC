@@ -89,10 +89,11 @@ class Module(object):
         return getattr(self.instance, attr)
     
     def create(self, name, *args):
+        sc_name = cpp.sc_core.sc_module_name(str(name))
         if args:
-            self.instance = self.cppclazz(cpp.sc_core.sc_module_name(str(name)), *args)
+            self.instance = self.cppclazz(sc_name, *args)
         else:
-            self.instance = self.cppclazz(cpp.sc_core.sc_module_name(str(name)))
+            self.instance = self.cppclazz(sc_name)
         return self
 
 class Connection(object):
