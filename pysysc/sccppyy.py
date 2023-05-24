@@ -239,7 +239,7 @@ def get_exports(module):
             res.append(attr)
     return res
 
-def get_inititator_sockets(module):
+def get_iniitator_sockets(module):
     res = []
     for elem in dir(module):
         attr=getattr(module, elem)
