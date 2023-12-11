@@ -46,20 +46,23 @@ void scc::PyScModule::end_of_simulation(){
 }
 
 void scc::PyScModule::ScThread(std::string fname) {
-        sc_core::sc_spawn_options opts;
-        sc_core::sc_spawn([this, fname](){
-            invoke_callback(fname);
-        }, nullptr, &opts);
+    sc_core::sc_spawn_options opts;
+    auto run_handle = sc_core::sc_spawn([this, fname](){
+        invoke_callback(fname);
+    }, nullptr, &opts);
+    this->sensitive << run_handle;
+    this->sensitive_pos << run_handle;
+    this->sensitive_neg << run_handle;
 }
 void scc::PyScModule::invoke_callback(std::string const& callback_name) {
-    // acquiring the GIL
-    gstate = PyGILState_Ensure();
-    if(PyObject_HasAttrString(self, callback_name.c_str())){
+   if(PyObject_HasAttrString(self, callback_name.c_str())){
+        // acquiring the GIL
+        gstate = PyGILState_Ensure();
         auto* func = PyObject_GetAttrString(self, callback_name.c_str());
         PyObject_CallFunctionObjArgs(func, nullptr);
+        // Release the thread. No Python API allowed beyond this point.
+        PyGILState_Release(gstate);
     }
-    // Release the thread. No Python API allowed beyond this point.
-    PyGILState_Release(gstate);
 }
 
 void scc::PyScModule::ScWait() {

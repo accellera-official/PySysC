@@ -8,6 +8,7 @@ from cppyy import gbl as cpp
 from builtins import getattr
 import re
 from enum import Enum
+import logging
 
 class Mode(Enum):
     SIM = 1
@@ -65,11 +66,24 @@ def dump_structure():
 class Simulation(object):
     
     @staticmethod
-    def run():
-        cpp.sc_core.sc_start()
+    def run(duration = None):
+        if duration:
+            if isinstance(duration, str):
+                f = cpp.sc_core.sc_time.from_string(duration)
+            elif isinstance(duration, float):
+                f=cpp.sc_core.sc_time.from_seconds(duration)
+            elif isinstance(duration, cpp.sc_core.sc_time):
+                f=duration
+            else:
+                raise ValueError(f'Illegal value for duration: {duration}.')
+            logging.debug(f"Starting simulation for {f.to_string()}")
+            cpp.sc_core.sc_start(f, cpp.sc_core.SC_RUN_TO_TIME)
+        else:
+            logging.debug("Starting simulation")
+            cpp.sc_core.sc_start()
         if not cpp.sc_core.sc_end_of_simulation_invoked():
             cpp.sc_core.sc_stop()
-        
+       
             
     def __init__(self):
         pass
@@ -89,10 +103,11 @@ class Module(object):
         return getattr(self.instance, attr)
     
     def create(self, name, *args):
+        sc_name = cpp.sc_core.sc_module_name(str(name))
         if args:
-            self.instance = self.cppclazz(cpp.sc_core.sc_module_name(str(name)), *args)
+            self.instance = self.cppclazz(sc_name, *args)
         else:
-            self.instance = self.cppclazz(cpp.sc_core.sc_module_name(str(name)))
+            self.instance = self.cppclazz(sc_name)
         return self
 
 class Connection(object):
@@ -253,4 +268,16 @@ class Clock(Connection):
             module_port.bind(self.clk_tgl)
         
         return self
+
+class Event(object):
+    '''
+    classdocs
+    '''
+
+    def __init__(self, name='PySysCEvent'):
+        self.name=name
+        self.evt = cpp.sc_core.sc_event('sc_event_'+self.name)
+        
+    def notify(self, period=0.0, time_unit='SC_NS'):
+        self.evt.notify(cpp.sc_core.sc_time(period, eval(f"cpp.sc_core.{time_unit}")))
 
