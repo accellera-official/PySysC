@@ -59,7 +59,7 @@ setup(name='PySysC',
     include_package_data=True,
     install_requires=[
         'cppyy',
-        'conan'
+        'conan<2.0'
         ],
     test_suite='nose.collector',
     tests_require=['nose'],
