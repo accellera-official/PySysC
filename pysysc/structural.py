@@ -66,48 +66,24 @@ def dump_structure():
 class Simulation(object):
     
     @staticmethod
-    def run():
-        cpp.sc_core.sc_start()
+    def run(duration = None):
+        if duration:
+            if isinstance(duration, str):
+                f = cpp.sc_core.sc_time.from_string(duration)
+            elif isinstance(duration, float):
+                f=cpp.sc_core.sc_time.from_seconds(duration)
+            elif isinstance(duration, cpp.sc_core.sc_time):
+                f=duration
+            else:
+                raise ValueError(f'Illegal value for duration: {duration}.')
+            logging.debug(f"Starting simulation for {f.to_string()}")
+            cpp.sc_core.sc_start(f, cpp.sc_core.SC_RUN_TO_TIME)
+        else:
+            logging.debug("Starting simulation")
+            cpp.sc_core.sc_start()
         if not cpp.sc_core.sc_end_of_simulation_invoked():
             cpp.sc_core.sc_stop()
-        
-    @staticmethod
-    def setup(log_level = logging.WARNING):
-        try:
-            if log_level >= logging.FATAL:
-                cpp.scc.init_logging(cpp.logging.FATAL, False)
-            elif log_level >= logging.ERROR:
-                cpp.scc.init_logging(cpp.logging.ERROR, False)
-            elif log_level >= logging.WARNING:
-                cpp.scc.init_logging(cpp.logging.WARNING, False)
-            elif log_level >= logging.INFO:
-                cpp.scc.init_logging(cpp.logging.INFO, False)
-            elif log_level >= logging.DEBUG:
-                cpp.scc.init_logging(cpp.logging.DEBUG, False)
-            else:
-                cpp.scc.init_logging(cpp.logging.TRACE, False)
-        except Exception: # fall back: use basic SystemC logging setup
-            verb_lut={
-                logging.FATAL:100, #SC_LOW
-                logging.ERROR: 200, #SC_MEDIUM
-                logging.WARNING: 300, #SC_HIGH
-                logging.INFO: 400, #SC_FULL
-                logging.DEBUG: 500 #SC_DEBUG
-                }
-            cpp.sc_core.sc_report_handler.set_verbosity_level(verb_lut[log_level]);
-        cpp.sc_core.sc_report_handler.set_actions(cpp.sc_core.SC_ID_MORE_THAN_ONE_SIGNAL_DRIVER_, cpp.sc_core.SC_DO_NOTHING);
-
-    @staticmethod
-    def configure(name="", enable_vcd=False):
-        if len(name) and os.path.isfile(name):
-            Simulation.cfg = cpp.scc.configurer(cpp.std.string(name));
-            if enable_vcd:
-                trace_name = os.path.basename(name)
-                Simulation.trace = cpp.scc.configurable_tracer(trace_name, 1, True, True)
-                Simulation.trace.add_control()        
-        else:
-            if enable_vcd:
-                Simulation.trace = cpp.scc.tracer('vcd_trace', 1, True)
+       
             
     def __init__(self):
         pass
@@ -116,7 +92,6 @@ class Module(object):
     '''
     classdocs
     '''
-
     def __init__(self, clazz):
         self.cppclazz=clazz
         self.instance=None
@@ -127,8 +102,12 @@ class Module(object):
             raise AttributeError
         return getattr(self.instance, attr)
     
-    def create(self, name):
-        self.instance = self.cppclazz(cpp.sc_core.sc_module_name(str(name)))
+    def create(self, name, *args):
+        sc_name = cpp.sc_core.sc_module_name(str(name))
+        if args:
+            self.instance = self.cppclazz(sc_name, *args)
+        else:
+            self.instance = self.cppclazz(sc_name)
         return self
 
 class Connection(object):
@@ -146,6 +125,7 @@ class Connection(object):
     
     def sink(self, module_port):
         self.targets.append(module_port)
+        #TODO: add try block and print types of both ports in case of a missmatch
         self.source.bind(module_port)
         return self
 
@@ -160,8 +140,8 @@ class Signal(Connection):
     '''
 
     _sc_inout_re = re.compile(r'^sc_core::sc_(?:_in)?out<(.*)>$')
-    _sc_port_re = re.compile(r'^sc_core::sc_port<[^<]*<(.*)>>$')
-
+    _sc_in_re = re.compile(r'^sc_core::sc_in<(.*)>$')
+    _sc_port_re = re.compile(r'^sc_core::sc_port<[^<]*<(.*)> ?>$')
 
     def __init__(self, name=None):
         Connection.__init__(self)
@@ -169,25 +149,34 @@ class Signal(Connection):
         self.signal=None
         self.data_type=None
         
+    def create_signal(self, module_port):
+        if self.signal is None:
+            port_class_name = type(module_port).__cpp_name__
+            match = self._sc_inout_re.match(port_class_name)
+            if match:
+                self.data_type = match.group(1)
+            else:
+                match = self._sc_in_re.match(port_class_name)
+                if match:
+                    self.data_type = match.group(1)
+                else:
+                    match = self._sc_port_re.match(port_class_name)
+                    if match:
+                        self.data_type = match.group(1)
+            if self.data_type is None:
+                raise AttributeError
+            py_dt_name = self.data_type.replace("::", ".").replace("<", "[").replace(">", "]")
+            self.signal = eval("cpp.sc_core.sc_signal[cpp.%s](self.name)" % py_dt_name)
+            
     def src(self, module_port):
         self.source=module_port
-        port_class_name=type(module_port).__cpp_name__
-        match = self._sc_inout_re.match(port_class_name)
-        if match:
-            self.data_type=match.group(1)
-        else:
-            match = self._sc_port_re.match(port_class_name)
-            if match:
-                self.data_type=match.group(1)
-        if self.data_type is None:
-            raise AttributeError;
-        py_dt_name=self.data_type.replace("::", ".").replace("<", "[").replace(">", "]")
-        self.signal = eval("cpp.sc_core.sc_signal[cpp.%s](self.name)" % py_dt_name)
+        self.create_signal(module_port)
         module_port.bind(self.signal)
         return self
     
     def sink(self, module_port):
         self.targets.append(module_port)
+        self.create_signal(module_port)
         module_port.bind(self.signal)
         return self
         
@@ -195,3 +184,100 @@ class Signal(Connection):
         self.targets.append(module_port_in)
         self.source.bind(module_port_in)
         return Signal().src(module_port_out)
+
+class SignalVector(Connection):
+    '''
+    classdocs
+    '''
+
+    _sc_inout_re = re.compile(r'^sc_core::sc_vector<sc_core::sc_(?:_in)?out<(.*)> ?>$')
+    _sc_in_re = re.compile(r'^sc_core::sc_vector<sc_core::sc_in<(.*)> ?>$')
+    _sc_port_re = re.compile(r'^sc_core::sc_vector<sc_core::sc_port<[^<]*<(.*)> ?> ?>$')
+
+    def __init__(self, name=None):
+        Connection.__init__(self)
+        self.name=name
+        self.signal=None
+        self.data_type=None
+        
+    def create_signal(self, module_port):
+        if self.signal is None:
+            port_class_name = type(module_port).__cpp_name__
+            match = self._sc_inout_re.match(port_class_name)
+            if match:
+                self.data_type = match.group(1)
+            else:
+                match = self._sc_in_re.match(port_class_name)
+                if match:
+                    self.data_type = match.group(1)
+                else:
+                    match = self._sc_port_re.match(port_class_name)
+                    if match:
+                        self.data_type = match.group(1)
+            if self.data_type is None:
+                raise AttributeError
+            py_dt_name = self.data_type.replace("::", ".").replace("<", "[").replace(">", "]")
+            self.signal = eval("cpp.sc_core.sc_signal[cpp.%s](self.name)" % py_dt_name)
+            
+    def src(self, module_port):
+        self.source=module_port
+        self.create_signal(module_port)
+        module_port.bind(self.signal)
+        return self
+    
+    def sink(self, module_port):
+        self.targets.append(module_port)
+        self.create_signal(module_port)
+        module_port.bind(self.signal)
+        return self
+
+class Clock(Connection):
+    '''
+    classdocs
+    '''
+    _sc_time_re = re.compile(r'^sc_core::sc_in<sc_core::sc_time>')
+
+    def __init__(
+            self, 
+            name=None, 
+            period=1.0, 
+            time_unit='SC_NS', 
+            duty_cycle=0.5, 
+            start_time=0, 
+            posedge_first=True):
+        Connection.__init__(self)
+        self.name=name
+        self.clk_tgl = cpp.sc_core.sc_clock(
+            'sc_clock_'+self.name, 
+            cpp.sc_core.sc_time(period, eval(f"cpp.sc_core.{time_unit}")),
+            duty_cycle, 
+            cpp.sc_core.sc_time(start_time, eval(f"cpp.sc_core.{time_unit}")), 
+            posedge_first)
+        self.clk_time = None
+        
+    def sink(self, module_port):
+        self.targets.append(module_port)
+        port_class_name = type(module_port).__cpp_name__
+        match = self._sc_time_re.match(port_class_name)
+        if match:
+            if self.clk_time is None:
+                self.clk_time = cpp.sc_core.sc_signal[cpp.sc_core.sc_time](self.name)
+                self.clk_time.write(self.clk_tgl.period())
+            module_port.bind(self.clk_time)
+        else:
+            module_port.bind(self.clk_tgl)
+        
+        return self
+
+class Event(object):
+    '''
+    classdocs
+    '''
+
+    def __init__(self, name='PySysCEvent'):
+        self.name=name
+        self.evt = cpp.sc_core.sc_event('sc_event_'+self.name)
+        
+    def notify(self, period=0.0, time_unit='SC_NS'):
+        self.evt.notify(cpp.sc_core.sc_time(period, eval(f"cpp.sc_core.{time_unit}")))
+

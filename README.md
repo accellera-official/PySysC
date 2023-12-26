@@ -1,6 +1,6 @@
 # PySysC
 
-A Python package to make SystemC usable from Python
+A Python package to make SystemC usable from Python. It supports composition of a SystemC/TLM model as well as running the simulation. As of version 0.2 it also allows to run Python functions as part of an SC_THREAD.
 
 ## How to setup the environment
 
@@ -27,12 +27,12 @@ STDCXX=11 python3 -m pip install cppyy
 # clone of PySysC
 git clone https://git.minres.com/SystemC/PySysC.git
 # install PySysC, for development PySysC use 'python3 -m pip install -e`
-SYSTEMC_HOME=<path to SystemC> python3 -m pip install -e PySysC
+SYSTEMC_HOME=<path to SystemC> python3 -m pip install PySysC
 ```
 
 ## Running the example
 
-To run the example you need to clone and build the PySysC-SC repo. It contains the the code and libraries being used in the example. This project uses [Conan.io](https://conan.io/) as package manager so it should be installed (see down below).
+To run the example you need to clone and build the PySysC-SC repo. It contains the code and libraries being used in the example. This project uses [Conan.io](https://conan.io/) as package manager so it should be installed (see down below).
 To deactivate conan and use a SystemC installation just comment out the line `setup_conan()` in CMakeLists.txt and set the environment variable SYSTEMC_HOME.
 
 ### Run the router_eample.py
@@ -54,7 +54,7 @@ python3 router_eample.py
 
 ### Installing conan separately
 
-conan.io will be installed as part of the PySysC module. To install it seperatly and build the example project without
+To install conan being used during cmake and build the example project without
 PySysC you need to execute the following steps:
 
 ```
@@ -69,3 +69,4 @@ conan remote add minres https://api.bintray.com/conan/minres/conan-repo
 ## TODO
 
 * pythonize `sc_module` with iteration protocol (`__next__` and `StopIteration`  exception)
+* add support for SC_METHOD
